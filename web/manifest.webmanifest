@@ -1,6 +1,6 @@
 {
-  "name": "三戦域戦線",
-  "short_name": "三戦域",
+  "name": "ALS online",
+  "short_name": "ALS online",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0d1219",

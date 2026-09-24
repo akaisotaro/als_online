@@ -1,4 +1,5 @@
-import { CARDS, GameEngine, Status, getCard, theaterName } from "./game.js";
+import { GameEngine, Status, getCard, theaterName } from "./game.js";
+import { cleanRoom, randomRoomCode } from "./room-code.js";
 
 const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
@@ -12,6 +13,10 @@ let connectionText = "";
 let peer = null;
 let connection = null;
 let toastTimer = 0;
+let hostAttempts = 0;
+let rulesOpen = false;
+let rulesHtml = "";
+let rulesLoading = false;
 
 const roomFromUrl = new URLSearchParams(location.search).get("room") || "";
 
@@ -22,9 +27,9 @@ app.addEventListener("click", event => {
 
   if (action === "host") startHost();
   else if (action === "join") joinRoom(document.querySelector("#room-input")?.value || "");
-  else if (action === "rules") renderRules();
+  else if (action === "rules") openRules();
+  else if (action === "close-rules") { rulesOpen = false; render(); }
   else if (action === "menu") leaveGame();
-  else if (action === "back") renderMenu();
   else if (action === "select") { selectedCard = button.dataset.card; render(); }
   else if (action === "play") sendAction({ type: "play", cardId: selectedCard, theater: button.dataset.theater, faceUp: button.dataset.face === "up" });
   else if (action === "withdraw") sendAction({ type: "withdraw" });
@@ -35,6 +40,11 @@ app.addEventListener("click", event => {
 });
 
 app.addEventListener("keydown", event => {
+  if (event.key === "Escape" && rulesOpen) {
+    rulesOpen = false;
+    render();
+    return;
+  }
   if (event.key === "Enter" && event.target.id === "room-input") {
     joinRoom(event.target.value);
   }
@@ -45,36 +55,36 @@ function renderMenu() {
   app.innerHTML = `
     <main class="shell">
       <section class="menu">
-        <h1>三戦域戦線</h1>
+        <h1>ALS online</h1>
         <p class="subtitle">空・陸・海を制する、2人用カードゲーム</p>
         <div class="menu-actions">
           <button class="primary" data-action="host">オンライン部屋を作る</button>
         </div>
         <div class="join-row">
-          <input id="room-input" maxlength="6" inputmode="text" autocomplete="off" value="${esc(cleanRoom(roomFromUrl))}" placeholder="招待コード6桁" aria-label="招待コード">
+          <input id="room-input" maxlength="2" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${esc(cleanRoom(roomFromUrl))}" placeholder="2桁" aria-label="招待コード">
           <button data-action="join">参加</button>
         </div>
-        <button class="ghost" data-action="rules" style="width:100%;margin-top:10px">遊び方・カード一覧</button>
+        <button class="ghost" data-action="rules" style="width:100%;margin-top:10px">ルール</button>
         <p class="notice">インストール不要です。オンライン対戦は、部屋を作った人が画面を開いたまま招待コードを共有してください。</p>
       </section>
-    </main>`;
+    </main>${rulesLayer()}`;
 }
 
-function renderRules() {
-  app.innerHTML = `
-    <main class="shell">
-      <section class="menu" style="width:min(760px,100%);margin-top:2vh">
-        <h2>遊び方</h2>
-        <div class="rules">
-          <p>各プレイヤーは6枚の手札を持ち、交互に1枚ずつ場へ出します。表向きならカード本来の戦域で能力が働き、裏向きなら好きな戦域へ戦力2として出せます。</p>
-          <p>各戦域の戦力合計を比べ、3戦域のうち2つ以上を支配すると戦闘に勝利します。同点の戦域は、その戦闘の先攻プレイヤーが支配します。12点を先取したプレイヤーがゲームの勝者です。</p>
-          <p>不利なら自分の手番に撤退できます。相手の得点は、撤退時の手札枚数と先攻・後攻で変わります。</p>
-          <h3>カード一覧</h3>
-          ${CARDS.map(c => `<p><b>${esc(c.id)} ${esc(c.name)}（${theaterName(c.type)}・${c.strength}）</b><br>${esc(c.text)}</p>`).join("")}
-        </div>
-        <button data-action="back" style="width:100%;margin-top:12px">戻る</button>
-      </section>
-    </main>`;
+async function openRules() {
+  rulesOpen = true;
+  render();
+  if (rulesHtml || rulesLoading) return;
+  rulesLoading = true;
+  try {
+    const response = await fetch("./rule.md", { cache: "no-cache" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    rulesHtml = renderMarkdown(await response.text());
+  } catch {
+    rulesHtml = "<p>ルールを読み込めませんでした。通信環境を確認してください。</p>";
+  } finally {
+    rulesLoading = false;
+    render();
+  }
 }
 
 function startHost() {
@@ -83,23 +93,42 @@ function startHost() {
   mode = "host";
   viewer = 0;
   engine = GameEngine.create();
+  hostAttempts = 0;
+  createHostPeer();
+}
+
+function createHostPeer() {
   roomCode = randomRoomCode();
   connectionText = "部屋を準備中…";
   render();
-
-  peer = new window.Peer(`three-fronts-${roomCode}`);
-  peer.on("open", () => { connectionText = "相手の参加を待っています"; render(); });
-  peer.on("connection", incoming => {
+  const pendingPeer = new window.Peer(`three-fronts-${roomCode}`);
+  peer = pendingPeer;
+  pendingPeer.on("open", () => {
+    if (peer !== pendingPeer) return;
+    connectionText = "相手の参加を待っています";
+    render();
+  });
+  pendingPeer.on("connection", incoming => {
+    if (peer !== pendingPeer) { incoming.close(); return; }
     if (connection?.open) { incoming.close(); return; }
     connection = incoming;
     wireConnection(connection, true);
   });
-  peer.on("error", handlePeerError);
+  pendingPeer.on("error", error => {
+    if (peer !== pendingPeer) return;
+    if (error?.type === "unavailable-id" && hostAttempts < 12) {
+      hostAttempts += 1;
+      pendingPeer.destroy();
+      createHostPeer();
+      return;
+    }
+    handlePeerError(error);
+  });
 }
 
 function joinRoom(rawCode) {
   const code = cleanRoom(rawCode);
-  if (code.length !== 6) return showToast("6桁の招待コードを入力してください。");
+  if (code.length !== 2) return showToast("2桁の招待コードを入力してください。");
   if (!window.Peer) return showToast("オンライン機能を読み込めませんでした。通信環境を確認してください。");
   cleanupNetwork();
   mode = "guest";
@@ -155,6 +184,7 @@ function leaveGame() {
   cleanupNetwork();
   engine = null;
   selectedCard = "";
+  rulesOpen = false;
   history.replaceState(null, "", location.pathname);
   renderMenu();
 }
@@ -213,7 +243,7 @@ function currentActor() {
 function render() {
   if (mode === "menu") return renderMenu();
   if (!engine) {
-    app.innerHTML = `<main class="shell"><section class="menu"><h2>オンライン対戦</h2><p>${esc(connectionText)}</p><p>招待コード <strong class="room-code">${esc(roomCode)}</strong></p><button data-action="menu">戻る</button></section></main>`;
+    app.innerHTML = `<main class="shell"><section class="menu"><h2>オンライン対戦</h2><p>${esc(connectionText)}</p><p>招待コード <strong class="room-code">${esc(roomCode)}</strong></p><button data-action="rules">ルール</button> <button data-action="menu">戻る</button></section></main>${rulesLayer()}`;
     return;
   }
 
@@ -228,8 +258,8 @@ function render() {
     <main class="shell">
       <header class="topbar">
         <button class="ghost" data-action="menu">終了</button>
-        <div class="titleline"><strong>三戦域戦線</strong>${onlineInfo}</div>
-        ${(mode === "host" || mode === "guest") ? `<button class="ghost" data-action="copy">招待</button>` : `<span></span>`}
+        <div class="titleline"><strong>ALS online</strong>${onlineInfo}</div>
+        <div class="top-actions"><button class="ghost" data-action="rules">ルール</button><button class="ghost" data-action="copy">招待</button></div>
       </header>
       <div class="score">
         ${scoreBox(0, actor)}
@@ -244,7 +274,7 @@ function render() {
         <summary>対戦ログ</summary>
         <ol>${s.log.slice().reverse().map(line => `<li>${esc(line)}</li>`).join("")}</ol>
       </details>
-    </main>`;
+    </main>${rulesLayer()}`;
 }
 
 function scoreBox(player, actor) {
@@ -342,21 +372,50 @@ function placementControls(card) {
 async function copyInvite() {
   const url = `${location.origin}${location.pathname}?room=${roomCode}`;
   try {
-    await navigator.clipboard.writeText(`三戦域戦線の招待コード: ${roomCode}\n${url}`);
+    await navigator.clipboard.writeText(`ALS onlineの招待コード: ${roomCode}\n${url}`);
     showToast("招待コードとURLをコピーしました。", false);
   } catch {
     showToast(`招待コードは ${roomCode} です。`, false);
   }
 }
 
-function randomRoomCode() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const values = new Uint32Array(6);
-  crypto.getRandomValues(values);
-  return Array.from(values, n => alphabet[n % alphabet.length]).join("");
+function rulesLayer() {
+  if (!rulesOpen) return "";
+  const content = rulesHtml || `<p class="waiting">${rulesLoading ? "読み込み中…" : "ルールを読み込んでいます…"}</p>`;
+  return `<div class="rule-backdrop" role="presentation">
+    <section class="rule-dialog" role="dialog" aria-modal="true" aria-label="ルール">
+      <div class="rule-dialog-head"><h2>ルール</h2><button data-action="close-rules" aria-label="ルールを閉じる">閉じる</button></div>
+      <div class="rule-content">${content}</div>
+    </section>
+  </div>`;
 }
 
-function cleanRoom(value) { return String(value).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6); }
+function renderMarkdown(source) {
+  const lines = esc(source).replace(/\r/g, "").split("\n");
+  const html = [];
+  let inList = false;
+  const closeList = () => { if (inList) { html.push("</ul>"); inList = false; } };
+  const inline = text => text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  for (const line of lines) {
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    const item = line.match(/^\s*-\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1].length + 1;
+      html.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+    } else if (item) {
+      if (!inList) { html.push("<ul>"); inList = true; }
+      html.push(`<li>${inline(item[1])}</li>`);
+    } else if (!line.trim()) {
+      closeList();
+    } else {
+      closeList();
+      html.push(`<p>${inline(line)}</p>`);
+    }
+  }
+  closeList();
+  return html.join("");
+}
 function esc(value) { return String(value ?? "").replace(/[&<>'"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])); }
 function showToast(message, danger = true) {
   toast.textContent = message;

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { CARDS, GameEngine, Status, Theater, getCard } from "../../web/game.js";
+import { cleanRoom, randomRoomCode } from "../../web/room-code.js";
 
 let passed = 0;
 function test(name, body) {
@@ -45,6 +47,11 @@ test("18枚のカードが重複なく定義されている", () => {
   assert.equal(new Set(CARDS.map(c => c.id)).size, 18);
 });
 
+test("招待コードは2桁の数字", () => {
+  for (let i = 0; i < 100; i += 1) assert.match(randomRoomCode(), /^\d{2}$/);
+  assert.equal(cleanRoom("A1-23"), "12");
+});
+
 test("指定された全効果文を保持する", () => {
   const expected = {
     A1: "あなたは隣接する各戦域で戦力3を得る。",
@@ -67,6 +74,16 @@ test("指定された全効果文を保持する", () => {
     S6: "能力なし。"
   };
   assert.deepEqual(Object.fromEntries(CARDS.map(c => [c.id, c.text])), expected);
+});
+
+test("rule.mdに全カード効果と得点処理がある", () => {
+  const rules = readFileSync(new URL("../../web/rule.md", import.meta.url), "utf8");
+  for (const card of CARDS) {
+    assert.equal(rules.includes(card.text), true, `${card.id}の効果文がrule.mdにありません`);
+  }
+  for (const phrase of ["合計12点", "6点を獲得", "手札6〜4枚: 相手が2点", "手札1〜0枚: 相手が6点"]) {
+    assert.equal(rules.includes(phrase), true, `得点処理「${phrase}」がrule.mdにありません`);
+  }
 });
 
 test("初期配布は各6枚で残り6枚", () => {
