@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "web/**"
+      - "tests/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -26,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify browser game
-        run: test -f web/index.html
+        run: node tests/game.test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

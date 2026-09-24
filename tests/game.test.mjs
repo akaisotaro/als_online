@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CARDS, GameEngine, Status, Theater, getCard, playerName } from "../../web/game.js";
-import { cleanRoom, randomRoomCode } from "../../web/room-code.js";
+import { CARDS, GameEngine, Status, Theater, getCard, playerName } from "../web/game.js";
+import { cleanRoom, randomRoomCode } from "../web/room-code.js";
 
 let passed = 0;
 function test(name, body) {
@@ -82,7 +82,7 @@ test("指定された全効果文を保持する", () => {
 });
 
 test("rule.mdに全カード効果と得点処理がある", () => {
-  const rules = readFileSync(new URL("../../web/rule.md", import.meta.url), "utf8");
+  const rules = readFileSync(new URL("../web/rule.md", import.meta.url), "utf8");
   for (const card of CARDS) {
     assert.equal(rules.includes(card.text), true, `${card.id}の効果文がrule.mdにありません`);
   }

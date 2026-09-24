@@ -19,6 +19,7 @@ https://akaisotaro.github.io/als_online/
 - 表向き／裏向き配置、被覆、戦力計算、同点時の先攻優先
 - 全カード能力、撤退点、戦域ローテーション、先攻交代、12点勝利
 - スマートフォン向けレスポンシブ画面
+- PCのドラッグ＆ドロップ、スマホのスワイプ配置
 - 招待コード式P2Pオンライン対戦
 - 対戦中にも開ける `web/rule.md` 連動のルール画面
 - GitHub ActionsによるGitHub Pages公開
@@ -42,12 +43,15 @@ python -m http.server 8080 --directory web
 Node.jsだけでブラウザ版のルールテストを実行できます。
 
 ```powershell
-node Tests/Web.TestRunner/game.test.mjs
+node tests/game.test.mjs
 ```
 
-## Unity版について
+## 構成
 
-先に作成したUnity用ソースは比較・検証用として `Assets` 以下に残しています。現在の公開対象は軽量な `web` フォルダで、Unityの導入やWebGLビルドは不要です。
+- `web`: 公開されるゲーム本体
+- `tests`: ブラウザ版のルールテスト
+- `docs`: カード効果文の原資料と取り扱いメモ
+- `.github/workflows`: テストとGitHub Pages公開設定
 
 ## 取り扱い
 
