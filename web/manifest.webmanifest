@@ -1,0 +1,9 @@
+{
+  "name": "三戦域戦線",
+  "short_name": "三戦域",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0d1219",
+  "theme_color": "#151b24",
+  "lang": "ja"
+}

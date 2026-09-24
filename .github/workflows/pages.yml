@@ -1,10 +1,11 @@
-name: Deploy WebGL to GitHub Pages
+name: Deploy browser game to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - "Builds/WebGL/**"
+      - "web/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -24,12 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify WebGL build
-        run: test -f Builds/WebGL/index.html
+      - name: Verify browser game
+        run: test -f web/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: Builds/WebGL
+          path: web
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
