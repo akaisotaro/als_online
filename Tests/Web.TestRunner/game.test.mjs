@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CARDS, GameEngine, Status, Theater, getCard } from "../../web/game.js";
+import { CARDS, GameEngine, Status, Theater, getCard, playerName } from "../../web/game.js";
 import { cleanRoom, randomRoomCode } from "../../web/room-code.js";
 
 let passed = 0;
@@ -50,6 +50,11 @@ test("18枚のカードが重複なく定義されている", () => {
 test("招待コードは2桁の数字", () => {
   for (let i = 0; i < 100; i += 1) assert.match(randomRoomCode(), /^\d{2}$/);
   assert.equal(cleanRoom("A1-23"), "12");
+});
+
+test("プレイヤー名はホストとゲスト", () => {
+  assert.equal(playerName(0), "ホスト");
+  assert.equal(playerName(1), "ゲスト");
 });
 
 test("指定された全効果文を保持する", () => {

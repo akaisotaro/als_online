@@ -63,11 +63,15 @@ h1, h2, h3, p { margin-top: 0; }
 
 .action-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(27, 36, 48, .96); }
 .hand { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 7px; }
-.hand-card { text-align: left; min-height: 80px; position: relative; }
+.hand-card { --card-accent: #8692a2; --card-tint: rgba(134, 146, 162, .14); text-align: left; min-height: 92px; position: relative; border-left: 7px solid var(--card-accent); background: linear-gradient(135deg, var(--card-tint), #344257 58%); }
+.hand-card.air { --card-accent: #59bde8; --card-tint: rgba(89, 189, 232, .27); }
+.hand-card.land { --card-accent: #c39a4f; --card-tint: rgba(195, 154, 79, .28); }
+.hand-card.sea { --card-accent: #557bd1; --card-tint: rgba(85, 123, 209, .30); }
 .hand-card.selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold) inset; }
-.hand-card b { display: block; padding-right: 1.6rem; }
+.hand-card b { display: block; padding-right: 1.6rem; margin-top: .25rem; }
 .hand-card .base { position: absolute; right: .65rem; top: .55rem; font-size: 1.2rem; color: var(--gold); }
 .hand-card small { display: block; color: #c7cfda; margin-top: .28rem; line-height: 1.25; }
+.card-type { display: inline-block; min-width: 2rem; padding: .12rem .45rem; border-radius: 999px; background: var(--card-accent); color: #111722; text-align: center; font-size: .76rem; font-weight: 900; }
 .placement, .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 7px; margin-top: 10px; }
 .placement button { min-height: 52px; }
 .panel-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }

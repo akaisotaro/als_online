@@ -1,4 +1,4 @@
-import { GameEngine, Status, getCard, theaterName } from "./game.js";
+import { GameEngine, Status, getCard, playerName, theaterName } from "./game.js?v=3";
 import { cleanRoom, randomRoomCode } from "./room-code.js";
 
 const app = document.querySelector("#app");
@@ -105,7 +105,7 @@ function createHostPeer() {
   peer = pendingPeer;
   pendingPeer.on("open", () => {
     if (peer !== pendingPeer) return;
-    connectionText = "相手の参加を待っています";
+    connectionText = "ゲストの参加を待っています";
     render();
   });
   pendingPeer.on("connection", incoming => {
@@ -172,7 +172,7 @@ function wireConnection(conn, isHost) {
 function handlePeerError(error) {
   const messages = {
     "unavailable-id": "同じ招待コードの部屋があります。もう一度作成してください。",
-    "peer-unavailable": "部屋が見つかりません。コードと相手の接続状態を確認してください。",
+    "peer-unavailable": "部屋が見つかりません。コードとホストの接続状態を確認してください。",
     network: "通信に失敗しました。ネットワークを確認してください。"
   };
   connectionText = "接続できませんでした";
@@ -200,7 +200,7 @@ function cleanupNetwork() {
 
 function sendAction(action) {
   if (mode === "guest") {
-    if (!connection?.open) return showToast("まだ相手と接続していません。");
+    if (!connection?.open) return showToast("まだホストと接続していません。");
     connection.send({ kind: "action", action });
     return;
   }
@@ -278,17 +278,17 @@ function render() {
 }
 
 function scoreBox(player, actor) {
-  const label = player === viewer ? "あなた" : "相手";
+  const label = playerName(player);
   const first = engine.state.firstPlayer === player ? "・先攻" : "";
   return `<div class="score-box ${actor === player && engine.state.status === Status.Playing ? "active" : ""}"><span>${label}${first}</span><b>${engine.state.scores[player]}点</b></div>`;
 }
 
 function statusText() {
   const s = engine.state;
-  if (s.status === Status.GameEnded) return `プレイヤー${s.battleWinner + 1}の勝利！`;
-  if (s.status === Status.BattleEnded) return `プレイヤー${s.battleWinner + 1}が第${s.battleNumber}戦に勝利し、${s.battlePoints}点獲得`;
+  if (s.status === Status.GameEnded) return `${playerName(s.battleWinner)}の勝利！`;
+  if (s.status === Status.BattleEnded) return `${playerName(s.battleWinner)}が第${s.battleNumber}戦に勝利し、${s.battlePoints}点獲得`;
   const actor = currentActor();
-  const who = actor === viewer ? "あなた" : "相手";
+  const who = playerName(actor);
   return `第${s.battleNumber}戦・${who}の${s.prompt ? "能力選択" : "手番"}`;
 }
 
@@ -301,8 +301,8 @@ function theaterColumn(theater) {
     <div class="theater-head">
       <b>${theaterName(theater)}</b>
       <div class="strengths">
-        <span class="${controller === opponent ? "controlled" : ""}">相手 ${opponent === 0 ? a : b}</span>
-        <span class="${controller === viewer ? "controlled" : ""}">自分 ${viewer === 0 ? a : b}</span>
+        <span class="${controller === opponent ? "controlled" : ""}">${playerName(opponent)} ${opponent === 0 ? a : b}</span>
+        <span class="${controller === viewer ? "controlled" : ""}">${playerName(viewer)} ${viewer === 0 ? a : b}</span>
       </div>
     </div>
     <div class="lane opponent">${laneCards(opponent, theater)}</div>
@@ -335,14 +335,14 @@ function actionPanel(canAct) {
     return `<section class="action-panel"><h3>ゲーム終了</h3>${canRestart ? `<button class="primary" data-action="new" style="width:100%">新しいゲーム</button>` : `<p class="waiting">部屋を作った人が次のゲームを開始できます。</p>`}</section>`;
   }
   if (s.prompt) {
-    if (!canAct) return `<section class="action-panel"><p class="waiting">相手が「${esc(s.prompt.title)}」を選択中です。</p></section>`;
+    if (!canAct) return `<section class="action-panel"><p class="waiting">${playerName(s.prompt.actor)}が「${esc(s.prompt.title)}」を選択中です。</p></section>`;
     return `<section class="action-panel prompt">
       <div class="panel-title"><h3>${esc(s.prompt.title)}</h3></div>
       <p>${esc(s.prompt.detail)}</p>
       <div class="choices">${s.prompt.options.map(o => `<button data-action="choose" data-key="${esc(o.key)}">${esc(o.label)}</button>`).join("")}</div>
     </section>`;
   }
-  if (!canAct) return `<section class="action-panel"><p class="waiting">相手の手番です。</p></section>`;
+  if (!canAct) return `<section class="action-panel"><p class="waiting">${playerName(s.activePlayer)}の手番です。</p></section>`;
 
   const hand = s.players[viewer].hand;
   if (!hand.includes(selectedCard)) selectedCard = "";
@@ -356,8 +356,8 @@ function actionPanel(canAct) {
 
 function handCard(id) {
   const card = getCard(id);
-  return `<button class="hand-card ${selectedCard === id ? "selected" : ""}" data-action="select" data-card="${id}">
-    <span class="base">${card.strength}</span><b>${esc(card.name)}</b><small>${theaterName(card.type)}：${esc(card.text)}</small>
+  return `<button class="hand-card ${card.type} ${selectedCard === id ? "selected" : ""}" data-action="select" data-card="${id}">
+    <span class="base">${card.strength}</span><span class="card-type">${theaterName(card.type)}</span><b>${esc(card.name)}</b><small>${esc(card.text)}</small>
   </button>`;
 }
 

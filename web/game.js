@@ -38,6 +38,10 @@ export function theaterName(value) {
   return value === Theater.Air ? "空" : value === Theater.Land ? "陸" : "海";
 }
 
+export function playerName(player) {
+  return player === 0 ? "ホスト" : "ゲスト";
+}
+
 export class GameEngine {
   constructor(state) {
     this.state = normalizeState(state);
@@ -74,7 +78,7 @@ export class GameEngine {
     if (this.state.forcedPlayOnly[player]) return fail("再展開の効果ではカードを1枚出してください。");
     const winner = 1 - player;
     const points = GameEngine.withdrawalPoints(player === this.state.firstPlayer, this.state.players[player].hand.length);
-    this.addLog(`プレイヤー${player + 1}が撤退。プレイヤー${winner + 1}が${points}点を獲得。`);
+    this.addLog(`${playerName(player)}が撤退。${playerName(winner)}が${points}点を獲得。`);
     this.finishBattle(winner, points);
     return ok();
   }
@@ -146,7 +150,7 @@ export class GameEngine {
     const s = this.state;
     if (s.status !== Status.Playing) return fail("戦闘は終了しています。");
     if (s.prompt || s.effects.length) return fail("先にカード能力を解決してください。");
-    if (s.activePlayer !== player) return fail("相手の手番です。");
+    if (s.activePlayer !== player) return fail(`${playerName(s.activePlayer)}の手番です。`);
     return ok();
   }
 
@@ -174,19 +178,19 @@ export class GameEngine {
       s.players[0].hand.push(s.deck.shift());
       s.players[1].hand.push(s.deck.shift());
     }
-    this.addLog(`第${s.battleNumber}戦を開始。プレイヤー${s.firstPlayer + 1}が先攻。`);
+    this.addLog(`第${s.battleNumber}戦を開始。${playerName(s.firstPlayer)}が先攻。`);
   }
 
   placeCard(owner, cardId, theater, faceUp) {
     const name = faceUp ? getCard(cardId).name : "裏向きカード";
     if (this.shouldDiscardOnPlay(theater, faceUp)) {
       this.state.discard.push(cardId);
-      this.addLog(`プレイヤー${owner + 1}の${name}は配置直後に破壊された。`);
+      this.addLog(`${playerName(owner)}の${name}は配置直後に破壊された。`);
       return;
     }
     const played = { cardId, owner, theater, faceUp, sequence: this.state.nextSequence++ };
     this.state.field.push(played);
-    this.addLog(`プレイヤー${owner + 1}が${theaterName(theater)}へ${name}を配置。`);
+    this.addLog(`${playerName(owner)}が${theaterName(theater)}へ${name}を配置。`);
     if (faceUp) this.triggerAbility(played);
   }
 
@@ -200,7 +204,7 @@ export class GameEngine {
     const ability = getCard(source.cardId).ability;
     if (ability === "airdrop") {
       this.state.airDropSources[source.owner] = source.cardId;
-      this.addLog(`プレイヤー${source.owner + 1}は次のカードを異なる戦域へ配置できる。`);
+      this.addLog(`${playerName(source.owner)}は次のカードを異なる戦域へ配置できる。`);
       return;
     }
     const effectKinds = new Set(["reinforce", "transport", "maneuver", "ambush", "redeploy", "disrupt"]);
@@ -298,7 +302,7 @@ export class GameEngine {
           this.state.field.splice(this.state.field.indexOf(target), 1);
           this.state.players[frame.owner].hand.push(target.cardId);
           this.state.bonusTurns[frame.owner] += 1;
-          this.addLog(`プレイヤー${frame.owner + 1}が裏向きカードを手札へ戻した。`);
+          this.addLog(`${playerName(frame.owner)}が裏向きカードを手札へ戻した。`);
         }
       }
     } else if (frame.kind === "disrupt") {
@@ -332,7 +336,7 @@ export class GameEngine {
   resolveCompletedBattle() {
     const wins = this.state.theaterOrder.filter(t => this.theaterController(t) === 0).length;
     const winner = wins >= 2 ? 0 : 1;
-    this.addLog(`全カードを解決。プレイヤー${winner + 1}が6点を獲得。`);
+    this.addLog(`全カードを解決。${playerName(winner)}が6点を獲得。`);
     this.finishBattle(winner, 6);
   }
 
@@ -345,7 +349,7 @@ export class GameEngine {
     s.effects = [];
     s.turnNeedsCompletion = false;
     s.status = s.scores[winner] >= 12 ? Status.GameEnded : Status.BattleEnded;
-    if (s.status === Status.GameEnded) this.addLog(`プレイヤー${winner + 1}がゲームに勝利。`);
+    if (s.status === Status.GameEnded) this.addLog(`${playerName(winner)}がゲームに勝利。`);
   }
 
   hasActiveAirDrop(player) {
@@ -365,7 +369,7 @@ export class GameEngine {
   }
 
   displayName(target, viewer) {
-    return target.faceUp || target.owner === viewer ? getCard(target.cardId).name : "相手の裏向きカード";
+    return target.faceUp || target.owner === viewer ? getCard(target.cardId).name : `${playerName(target.owner)}の裏向きカード`;
   }
 
   prompt(actor, title, detail, options) { this.state.prompt = { actor, title, detail, options }; }
