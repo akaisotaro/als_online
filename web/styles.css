@@ -44,7 +44,9 @@ h1, h2, h3, p { margin-top: 0; }
 .status { padding: .65rem .8rem; border-radius: 10px; text-align: center; background: #192331; margin-bottom: 10px; color: #e6e9ee; }
 
 .battlefield { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.theater { min-width: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: rgba(27, 36, 48, .94); }
+.theater { min-width: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: rgba(27, 36, 48, .94); transition: border-color .15s, box-shadow .15s, transform .15s; }
+body.drag-active .theater { border-color: #718199; }
+.theater.drop-target { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(240, 200, 107, .38), 0 8px 28px #0008; transform: translateY(-3px); }
 .theater.air .theater-head { background: linear-gradient(135deg, #275f7a, var(--air)); }
 .theater.land .theater-head { background: linear-gradient(135deg, #5c4f2e, var(--land)); }
 .theater.sea .theater-head { background: linear-gradient(135deg, #17425f, var(--sea)); }
@@ -63,7 +65,9 @@ h1, h2, h3, p { margin-top: 0; }
 
 .action-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(27, 36, 48, .96); }
 .hand { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 7px; }
-.hand-card { --card-accent: #8692a2; --card-tint: rgba(134, 146, 162, .14); text-align: left; min-height: 92px; position: relative; border-left: 7px solid var(--card-accent); background: linear-gradient(135deg, var(--card-tint), #344257 58%); }
+.hand-card { --card-accent: #8692a2; --card-tint: rgba(134, 146, 162, .14); text-align: left; min-height: 92px; position: relative; border-left: 7px solid var(--card-accent); background: linear-gradient(135deg, var(--card-tint), #344257 58%); cursor: grab; touch-action: pan-x; }
+.hand-card:active { cursor: grabbing; }
+.hand-card.dragging { opacity: .34; }
 .hand-card.air { --card-accent: #59bde8; --card-tint: rgba(89, 189, 232, .27); }
 .hand-card.land { --card-accent: #c39a4f; --card-tint: rgba(195, 154, 79, .28); }
 .hand-card.sea { --card-accent: #557bd1; --card-tint: rgba(85, 123, 209, .30); }
@@ -79,6 +83,7 @@ h1, h2, h3, p { margin-top: 0; }
 .prompt { border-color: var(--gold); }
 .prompt p { color: #dbe1e9; margin-bottom: .6rem; }
 .waiting { text-align: center; color: var(--muted); padding: .75rem; }
+.touch-hint { display: none; }
 .footer-row { display: flex; gap: 8px; justify-content: space-between; margin-top: 10px; }
 .log { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
 .log summary { color: var(--muted); cursor: pointer; }
@@ -95,6 +100,15 @@ h1, h2, h3, p { margin-top: 0; }
 .rule-content p, .rule-content ul { margin: 0 0 .8rem; }
 .rule-content ul { padding-left: 1.4rem; }
 .rule-content li { margin-bottom: .42rem; }
+
+.placement-backdrop { position: fixed; inset: 0; z-index: 18; display: grid; place-items: center; padding: 14px; background: rgba(5, 8, 12, .78); }
+.placement-dialog { width: min(440px, 100%); padding: 20px; border: 1px solid var(--gold); border-radius: 16px; background: #19222e; box-shadow: 0 24px 80px #000c; }
+.placement-dialog h2 { margin-bottom: .4rem; }
+.placement-dialog p { color: #d4dbe4; }
+.orientation-actions { display: grid; gap: 8px; margin: 14px 0 10px; }
+.orientation-actions + .placement-note { color: #e9bb79; font-size: .88rem; }
+.placement-dialog > .ghost { width: 100%; margin-top: 4px; }
+.drag-ghost { position: fixed; z-index: 30; width: 160px; pointer-events: none; opacity: .94; transform: translate(-50%, -112%) rotate(-2deg); box-shadow: 0 14px 36px #000b; }
 
 #toast { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 20; transform: translate(-50%, 130%); opacity: 0; transition: .2s; width: min(90vw, 520px); padding: .8rem 1rem; border-radius: 10px; background: #7b332f; color: white; text-align: center; box-shadow: 0 8px 30px #000a; }
 #toast.show { transform: translate(-50%, 0); opacity: 1; }
@@ -118,4 +132,9 @@ h1, h2, h3, p { margin-top: 0; }
   .action-panel { padding: 8px; }
   .hand { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
   .hand-card { flex: 0 0 152px; scroll-snap-align: start; }
+}
+
+@media (pointer: coarse) {
+  .desktop-hint { display: none; }
+  .touch-hint { display: inline; }
 }

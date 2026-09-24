@@ -17,10 +17,18 @@ let hostAttempts = 0;
 let rulesOpen = false;
 let rulesHtml = "";
 let rulesLoading = false;
+let pendingPlacement = null;
+let desktopDragCardId = "";
+let touchDrag = null;
+let suppressClickUntil = 0;
 
 const roomFromUrl = new URLSearchParams(location.search).get("room") || "";
 
 app.addEventListener("click", event => {
+  if (Date.now() < suppressClickUntil) {
+    event.preventDefault();
+    return;
+  }
   const button = event.target.closest("button[data-action]");
   if (!button || button.disabled) return;
   const action = button.dataset.action;
@@ -32,6 +40,8 @@ app.addEventListener("click", event => {
   else if (action === "menu") leaveGame();
   else if (action === "select") { selectedCard = button.dataset.card; render(); }
   else if (action === "play") sendAction({ type: "play", cardId: selectedCard, theater: button.dataset.theater, faceUp: button.dataset.face === "up" });
+  else if (action === "place-dropped") finishPlacement(button.dataset.face === "up");
+  else if (action === "cancel-drop") { pendingPlacement = null; render(); }
   else if (action === "withdraw") sendAction({ type: "withdraw" });
   else if (action === "choose") sendAction({ type: "choose", key: button.dataset.key });
   else if (action === "next") sendAction({ type: "next" });
@@ -40,6 +50,11 @@ app.addEventListener("click", event => {
 });
 
 app.addEventListener("keydown", event => {
+  if (event.key === "Escape" && pendingPlacement) {
+    pendingPlacement = null;
+    render();
+    return;
+  }
   if (event.key === "Escape" && rulesOpen) {
     rulesOpen = false;
     render();
@@ -49,6 +64,74 @@ app.addEventListener("keydown", event => {
     joinRoom(event.target.value);
   }
 });
+
+app.addEventListener("dragstart", event => {
+  const card = event.target.closest?.(".hand-card");
+  if (!card || !canStartPlacement(card.dataset.card)) {
+    event.preventDefault();
+    return;
+  }
+  desktopDragCardId = card.dataset.card;
+  card.classList.add("dragging");
+  document.body.classList.add("drag-active");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", desktopDragCardId);
+});
+
+app.addEventListener("dragover", event => {
+  const theater = event.target.closest?.(".theater[data-theater]");
+  if (!desktopDragCardId || !theater) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  setDropTarget(theater);
+});
+
+app.addEventListener("drop", event => {
+  const theater = event.target.closest?.(".theater[data-theater]");
+  if (!desktopDragCardId || !theater) return;
+  event.preventDefault();
+  const cardId = desktopDragCardId;
+  const targetTheater = theater.dataset.theater;
+  cleanupDesktopDrag();
+  requestPlacement(cardId, targetTheater);
+});
+
+app.addEventListener("dragend", cleanupDesktopDrag);
+
+app.addEventListener("pointerdown", event => {
+  if (event.pointerType === "mouse" || event.button !== 0) return;
+  const card = event.target.closest?.(".hand-card");
+  if (!card || !canStartPlacement(card.dataset.card)) return;
+  touchDrag = {
+    pointerId: event.pointerId,
+    cardId: card.dataset.card,
+    startX: event.clientX,
+    startY: event.clientY,
+    dragging: false,
+    source: card,
+    ghost: null,
+    target: null
+  };
+  card.setPointerCapture?.(event.pointerId);
+});
+
+app.addEventListener("pointermove", event => {
+  if (!touchDrag || touchDrag.pointerId !== event.pointerId) return;
+  const dx = event.clientX - touchDrag.startX;
+  const dy = event.clientY - touchDrag.startY;
+  if (!touchDrag.dragging) {
+    if (dy >= -12 || Math.abs(dy) < Math.abs(dx) * .7) return;
+    startTouchDrag();
+  }
+  event.preventDefault();
+  moveTouchGhost(event.clientX, event.clientY);
+  const theater = document.elementFromPoint(event.clientX, event.clientY)?.closest?.(".theater[data-theater]") || null;
+  touchDrag.target = theater;
+  setDropTarget(theater);
+});
+
+app.addEventListener("pointerup", event => endTouchDrag(event, true));
+app.addEventListener("pointercancel", event => endTouchDrag(event, false));
 
 function renderMenu() {
   mode = "menu";
@@ -159,6 +242,7 @@ function wireConnection(conn, isHost) {
     } else if (!isHost && data.kind === "state" && data.state) {
       engine = new GameEngine(data.state);
       selectedCard = "";
+      pendingPlacement = null;
       connectionText = "接続済み";
       render();
     } else if (!isHost && data.kind === "error") {
@@ -181,9 +265,12 @@ function handlePeerError(error) {
 }
 
 function leaveGame() {
+  cleanupDesktopDrag();
+  cleanupTouchDrag();
   cleanupNetwork();
   engine = null;
   selectedCard = "";
+  pendingPlacement = null;
   rulesOpen = false;
   history.replaceState(null, "", location.pathname);
   renderMenu();
@@ -228,6 +315,7 @@ function applyAction(player, action) {
     return;
   }
   selectedCard = "";
+  pendingPlacement = null;
   if (mode === "host") sendSnapshot();
   render();
 }
@@ -274,7 +362,7 @@ function render() {
         <summary>対戦ログ</summary>
         <ol>${s.log.slice().reverse().map(line => `<li>${esc(line)}</li>`).join("")}</ol>
       </details>
-    </main>${rulesLayer()}`;
+    </main>${placementLayer()}${rulesLayer()}`;
 }
 
 function scoreBox(player, actor) {
@@ -297,7 +385,7 @@ function theaterColumn(theater) {
   const b = engine.theaterStrength(1, theater);
   const controller = engine.theaterController(theater);
   const opponent = 1 - viewer;
-  return `<article class="theater ${theater}">
+  return `<article class="theater ${theater}" data-theater="${theater}">
     <div class="theater-head">
       <b>${theaterName(theater)}</b>
       <div class="strengths">
@@ -350,13 +438,13 @@ function actionPanel(canAct) {
   return `<section class="action-panel">
     <div class="panel-title"><h3>手札 ${hand.length}枚</h3><button class="danger" data-action="withdraw" ${s.forcedPlayOnly[viewer] ? "disabled" : ""}>撤退</button></div>
     <div class="hand">${hand.map(id => handCard(id)).join("")}</div>
-    ${selected ? placementControls(selected) : `<p class="waiting">出すカードを選んでください。</p>`}
+    ${selected ? placementControls(selected) : `<p class="waiting gesture-hint"><span class="desktop-hint">カードを戦域へドラッグ、またはクリックして選択</span><span class="touch-hint">カードを戦域へ上にスワイプ、またはタップして選択</span></p>`}
   </section>`;
 }
 
 function handCard(id) {
   const card = getCard(id);
-  return `<button class="hand-card ${card.type} ${selectedCard === id ? "selected" : ""}" data-action="select" data-card="${id}">
+  return `<button class="hand-card ${card.type} ${selectedCard === id ? "selected" : ""}" data-action="select" data-card="${id}" draggable="true">
     <span class="base">${card.strength}</span><span class="card-type">${theaterName(card.type)}</span><b>${esc(card.name)}</b><small>${esc(card.text)}</small>
   </button>`;
 }
@@ -367,6 +455,100 @@ function placementControls(card) {
     return `<button data-action="play" data-theater="${theater}" data-face="up" ${upAllowed ? "" : "disabled"}>${theaterName(theater)}へ表向き</button>
       <button data-action="play" data-theater="${theater}" data-face="down">${theaterName(theater)}へ裏向き</button>`;
   }).join("")}</div>`;
+}
+
+function canStartPlacement(cardId) {
+  return Boolean(
+    engine &&
+    engine.state.status === Status.Playing &&
+    !engine.state.prompt &&
+    engine.state.activePlayer === viewer &&
+    engine.state.players[viewer].hand.includes(cardId)
+  );
+}
+
+function requestPlacement(cardId, theater) {
+  if (!canStartPlacement(cardId) || !engine.state.theaterOrder.includes(theater)) return;
+  selectedCard = cardId;
+  pendingPlacement = { cardId, theater };
+  render();
+}
+
+function finishPlacement(faceUp) {
+  if (!pendingPlacement) return;
+  const placement = pendingPlacement;
+  pendingPlacement = null;
+  sendAction({ type: "play", cardId: placement.cardId, theater: placement.theater, faceUp });
+}
+
+function placementLayer() {
+  if (!pendingPlacement || !engine) return "";
+  const card = getCard(pendingPlacement.cardId);
+  const upAllowed = engine.canPlayFaceUp(viewer, card.id, pendingPlacement.theater);
+  return `<div class="placement-backdrop" role="presentation">
+    <section class="placement-dialog" role="dialog" aria-modal="true" aria-label="カードの向きを選択">
+      <h2>${esc(card.name)}</h2>
+      <p><strong>${theaterName(pendingPlacement.theater)}</strong>へ配置します。向きを選んでください。</p>
+      <div class="orientation-actions">
+        <button class="primary" data-action="place-dropped" data-face="up" ${upAllowed ? "" : "disabled"}>表向きで出す</button>
+        <button data-action="place-dropped" data-face="down">裏向きで出す（戦力2）</button>
+      </div>
+      ${upAllowed ? "" : `<p class="placement-note">この戦域には表向きで出せません。</p>`}
+      <button class="ghost" data-action="cancel-drop">キャンセル</button>
+    </section>
+  </div>`;
+}
+
+function setDropTarget(theater) {
+  document.querySelectorAll(".theater.drop-target").forEach(item => item.classList.remove("drop-target"));
+  theater?.classList.add("drop-target");
+}
+
+function cleanupDesktopDrag() {
+  desktopDragCardId = "";
+  document.querySelectorAll(".hand-card.dragging").forEach(card => card.classList.remove("dragging"));
+  document.body.classList.remove("drag-active");
+  setDropTarget(null);
+}
+
+function startTouchDrag() {
+  if (!touchDrag || touchDrag.dragging) return;
+  touchDrag.dragging = true;
+  touchDrag.source.classList.add("dragging");
+  const ghost = touchDrag.source.cloneNode(true);
+  ghost.classList.remove("dragging", "selected");
+  ghost.classList.add("drag-ghost");
+  ghost.removeAttribute("draggable");
+  ghost.removeAttribute("data-action");
+  document.body.appendChild(ghost);
+  touchDrag.ghost = ghost;
+  document.body.classList.add("drag-active");
+}
+
+function moveTouchGhost(x, y) {
+  if (!touchDrag?.ghost) return;
+  touchDrag.ghost.style.left = `${x}px`;
+  touchDrag.ghost.style.top = `${y}px`;
+}
+
+function endTouchDrag(event, shouldPlace) {
+  if (!touchDrag || touchDrag.pointerId !== event.pointerId) return;
+  const wasDragging = touchDrag.dragging;
+  const cardId = touchDrag.cardId;
+  const theater = touchDrag.target?.dataset.theater || "";
+  cleanupTouchDrag();
+  if (!wasDragging) return;
+  suppressClickUntil = Date.now() + 500;
+  if (shouldPlace && theater) requestPlacement(cardId, theater);
+}
+
+function cleanupTouchDrag() {
+  if (!touchDrag) return;
+  touchDrag.source?.classList.remove("dragging");
+  touchDrag.ghost?.remove();
+  touchDrag = null;
+  document.body.classList.remove("drag-active");
+  setDropTarget(null);
 }
 
 async function copyInvite() {
