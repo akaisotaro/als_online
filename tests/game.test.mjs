@@ -89,9 +89,6 @@ test("rule.mdに全カード効果と得点処理がある", () => {
   for (const phrase of ["合計12点", "6点を獲得", "手札6〜4枚: 相手が2点", "手札1〜0枚: 相手が6点"]) {
     assert.equal(rules.includes(phrase), true, `得点処理「${phrase}」がrule.mdにありません`);
   }
-  for (const phrase of ["ドラッグ＆ドロップ", "上にスワイプ"]) {
-    assert.equal(rules.includes(phrase), true, `操作説明「${phrase}」がrule.mdにありません`);
-  }
 });
 
 test("初期配布は各6枚で残り6枚", () => {

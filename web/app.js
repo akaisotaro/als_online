@@ -580,7 +580,7 @@ function renderMarkdown(source) {
   const inline = text => text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   for (const line of lines) {
     const heading = line.match(/^(#{1,3})\s+(.+)$/);
-    const item = line.match(/^\s*-\s+(.+)$/);
+    const item = line.match(/^\s*[-*]\s+(.+)$/);
     if (heading) {
       closeList();
       const level = heading[1].length + 1;
